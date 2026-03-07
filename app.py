@@ -13,10 +13,10 @@ app = Flask(__name__)
 url: str | None = os.getenv("SUPABASE_URL")
 key: str | None = os.getenv("SUPABASE_KEY")
 
-if not url or not key:
-    raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
-
-supabase: Client = create_client(url, key)
+# Create client only if credentials are available
+supabase: Client | None = None
+if url and key:
+    supabase = create_client(url, key)
 
 embedding_model = None
 
@@ -47,9 +47,18 @@ def build_onboarding_profile_text(onboarding_row: dict) -> str:
     return normalize_text(" ".join(str(v) for v in fields if v is not None))
 
 
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Health check endpoint for deployment verification."""
+    return jsonify({"status": "healthy", "service": "content-based-filtering"}), 200
+
+
 @app.route("/", methods=["GET"])
 @app.route("/recommendations", methods=["GET"])
 def recommend_projects():
+    if not supabase:
+        return jsonify({"error": "Database not configured. Set SUPABASE_URL and SUPABASE_KEY environment variables."}), 500
+    
     user_id = request.args.get("user_id", type=str)
     if not user_id:
         return jsonify({"error": "Query param 'user_id' is required."}), 400
