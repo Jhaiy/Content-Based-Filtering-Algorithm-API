@@ -13,20 +13,12 @@ app = Flask(__name__)
 url: str | None = os.getenv("SUPABASE_URL")
 key: str | None = os.getenv("SUPABASE_KEY")
 
-# Create client only if credentials are available
-supabase: Client | None = None
-if url and key:
-    supabase = create_client(url, key)
+if not url or not key:
+    raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
 
-embedding_model = None
+supabase: Client = create_client(url, key)
 
-
-def get_embedding_model():
-    """Lazy-load the embedding model to avoid blocking port binding on startup."""
-    global embedding_model
-    if embedding_model is None:
-        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    return embedding_model
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 def normalize_text(value: object) -> str:
@@ -47,18 +39,9 @@ def build_onboarding_profile_text(onboarding_row: dict) -> str:
     return normalize_text(" ".join(str(v) for v in fields if v is not None))
 
 
-@app.route("/health", methods=["GET"])
-def health_check():
-    """Health check endpoint for deployment verification."""
-    return jsonify({"status": "healthy", "service": "content-based-filtering"}), 200
-
-
 @app.route("/", methods=["GET"])
 @app.route("/recommendations", methods=["GET"])
 def recommend_projects():
-    if not supabase:
-        return jsonify({"error": "Database not configured. Set SUPABASE_URL and SUPABASE_KEY environment variables."}), 500
-    
     user_id = request.args.get("user_id", type=str)
     if not user_id:
         return jsonify({"error": "Query param 'user_id' is required."}), 400
@@ -123,9 +106,8 @@ def recommend_projects():
     if not corpus:
         return jsonify({"error": "No usable project documents after preprocessing."}), 404
 
-    model = get_embedding_model()
-    user_embedding = model.encode([onboarding_profile])
-    project_embeddings = model.encode(corpus)
+    user_embedding = embedding_model.encode([onboarding_profile])
+    project_embeddings = embedding_model.encode(corpus)
     scores = cosine_similarity(user_embedding, project_embeddings).flatten()
 
     ranked = sorted(enumerate(scores), key=lambda item: item[1], reverse=True)
