@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
+from flask_cors import CORS
+CORS(app, origins=["http://localhost:3000", "https://buildxdesigner.site", "https://www.buildxdesigner.site"])
 
 load_dotenv()
 
