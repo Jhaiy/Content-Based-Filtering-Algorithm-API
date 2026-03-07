@@ -21,6 +21,12 @@ supabase: Client = create_client(url, key)
 
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
+LIKES_TABLE_CANDIDATES = (
+    "liked_templates",
+    "template_likes",
+    "project_likes",
+)
+
 
 def normalize_text(value: object) -> str:
     """Normalize text for vectorization."""
@@ -38,6 +44,41 @@ def build_onboarding_profile_text(onboarding_row: dict) -> str:
         onboarding_row.get("team_size", ""),
     ]
     return normalize_text(" ".join(str(v) for v in fields if v is not None))
+
+
+def fetch_like_counts(project_ids: list[str]) -> dict[str, int]:
+    """Fetch like counts keyed by project_id from the first available likes table."""
+    if not project_ids:
+        return {}
+
+    project_id_set = set(project_ids)
+    likes_table_override = os.getenv("LIKES_TABLE_NAME", "").strip()
+
+    table_candidates = []
+    if likes_table_override:
+        table_candidates.append(likes_table_override)
+    table_candidates.extend(LIKES_TABLE_CANDIDATES)
+
+    for table_name in table_candidates:
+        try:
+            likes_resp = (
+                supabase
+                .table(table_name)
+                .select("project_id")
+                .in_("project_id", project_ids)
+                .execute()
+            )
+        except Exception:
+            continue
+
+        counts: dict[str, int] = {project_id: 0 for project_id in project_ids}
+        for row in likes_resp.data or []:
+            pid = str(row.get("project_id", ""))
+            if pid in project_id_set:
+                counts[pid] = counts.get(pid, 0) + 1
+        return counts
+
+    return {project_id: 0 for project_id in project_ids}
 
 
 @app.route("/", methods=["GET"])
@@ -107,6 +148,10 @@ def recommend_projects():
     if not corpus:
         return jsonify({"error": "No usable project documents after preprocessing."}), 404
 
+    like_counts = fetch_like_counts(
+        [str(row.get("project_id")) for row in project_rows if row.get("project_id")]
+    )
+
     user_embedding = embedding_model.encode([onboarding_profile])
     project_embeddings = embedding_model.encode(corpus)
     scores = cosine_similarity(user_embedding, project_embeddings).flatten()
@@ -123,6 +168,7 @@ def recommend_projects():
         recommendations.append(
             {
                 "project_id": template.get("project_id"),
+                "like_count": like_counts.get(str(template.get("project_id")), 0),
                 "template_user_id": template.get("user_id"),
                 "author": {
                     "user_id": profiles_data.get("user_id"),
