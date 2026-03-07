@@ -1,0 +1,10 @@
+Flask
+Flask-MySQLdb
+mysqlclient
+nltk
+numpy
+pandas
+scikit-learn
+scipy
+SQLAlchemy
+PyMySQL
