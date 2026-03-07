@@ -21,12 +21,6 @@ supabase: Client = create_client(url, key)
 
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
-LIKES_TABLE_CANDIDATES = (
-    "liked_templates",
-    "template_likes",
-    "project_likes",
-)
-
 
 def normalize_text(value: object) -> str:
     """Normalize text for vectorization."""
@@ -47,38 +41,29 @@ def build_onboarding_profile_text(onboarding_row: dict) -> str:
 
 
 def fetch_like_counts(project_ids: list[str]) -> dict[str, int]:
-    """Fetch like counts keyed by project_id from the first available likes table."""
+    """Fetch like counts keyed by project_id from template_interactions."""
     if not project_ids:
         return {}
 
-    project_id_set = set(project_ids)
-    likes_table_override = os.getenv("LIKES_TABLE_NAME", "").strip()
+    unique_project_ids = list(dict.fromkeys(project_ids))
+    counts: dict[str, int] = {project_id: 0 for project_id in unique_project_ids}
 
-    table_candidates = []
-    if likes_table_override:
-        table_candidates.append(likes_table_override)
-    table_candidates.extend(LIKES_TABLE_CANDIDATES)
-
-    for table_name in table_candidates:
+    for project_id in unique_project_ids:
         try:
-            likes_resp = (
+            # JS equivalent:
+            # .from('template_interactions').select('*', { count: 'exact', head: true })
+            resp = (
                 supabase
-                .table(table_name)
-                .select("project_id")
-                .in_("project_id", project_ids)
+                .table("template_interactions")
+                .select("*", count="exact", head=True)
+                .eq("project_id", project_id)
                 .execute()
             )
+            counts[project_id] = int(resp.count or 0)
         except Exception:
-            continue
+            counts[project_id] = 0
 
-        counts: dict[str, int] = {project_id: 0 for project_id in project_ids}
-        for row in likes_resp.data or []:
-            pid = str(row.get("project_id", ""))
-            if pid in project_id_set:
-                counts[pid] = counts.get(pid, 0) + 1
-        return counts
-
-    return {project_id: 0 for project_id in project_ids}
+    return counts
 
 
 @app.route("/", methods=["GET"])
