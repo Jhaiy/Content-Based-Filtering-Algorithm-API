@@ -18,8 +18,15 @@ if not url or not key:
 
 supabase: Client = create_client(url, key)
 
-# Initialize semantic embedding model (loads once at startup)
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+embedding_model = None
+
+
+def get_embedding_model():
+    """Lazy-load the embedding model to avoid blocking port binding on startup."""
+    global embedding_model
+    if embedding_model is None:
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    return embedding_model
 
 
 def normalize_text(value: object) -> str:
@@ -107,8 +114,9 @@ def recommend_projects():
     if not corpus:
         return jsonify({"error": "No usable project documents after preprocessing."}), 404
 
-    user_embedding = embedding_model.encode([onboarding_profile])
-    project_embeddings = embedding_model.encode(corpus)
+    model = get_embedding_model()
+    user_embedding = model.encode([onboarding_profile])
+    project_embeddings = model.encode(corpus)
     scores = cosine_similarity(user_embedding, project_embeddings).flatten()
 
     ranked = sorted(enumerate(scores), key=lambda item: item[1], reverse=True)
