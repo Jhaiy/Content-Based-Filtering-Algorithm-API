@@ -10,7 +10,7 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "https://buildxdesigner.site", "https://www.buildxdesigner.site"])
+CORS(app, origins=["http://localhost:3000", "https://buildxdesigner.site", "https://www.buildxdesigner.site", "https://fork-buildxdesigner.site"])
 url: str | None = os.getenv("SUPABASE_URL")
 key: str | None = os.getenv("SUPABASE_KEY")
 
